@@ -1,1 +1,5 @@
-module Lib where
+module Lib
+  ( module Trace
+  ) where
+
+import Trace

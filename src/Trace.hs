@@ -30,14 +30,11 @@ data B = I | O deriving Show
 -- | 8ビット。 左がMSB, 右がLSB
 data Byte = B B B B B B B B B deriving Show
 
-readTraces :: IO ()
-readTraces = do
-    let f = "dfltTracesL/LA100.nbt"
+readTraces :: FilePath -> IO [Trace]
+readTraces f = do
     rh <- openFile f ReadMode
     i  <- BL.hGetContents rh
-    let d = runGet getTraces i
-    -- mapM_ print d
-    print (length d)
+    return $ runGet getTraces i
 
 getTraces :: Get [Trace]
 getTraces = many getTrace
