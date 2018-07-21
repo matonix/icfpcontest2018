@@ -1,0 +1,38 @@
+name: icfpcontest2018
+version: '0.1.0'
+category: Web
+author: maton
+maintainer: automatonix@gmail.com
+copyright: Yokoyama Haruki
+license: BSD3
+github: matonix/icfpcontest2018
+
+dependencies:
+- base >=4.7 && <5
+- binary
+- bytestring
+ghc-options:
+- -Wall
+
+library:
+  source-dirs: src
+
+executables:
+  icfpcontest2018:
+    main: Main.hs
+    source-dirs: app
+    dependencies:
+    - icfpcontest2018
+    ghc-options:
+    - -Wall
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+
+tests:
+  icfpcontest2018-test:
+    main: Spec.hs
+    source-dirs: test
+    dependencies:
+    - icfpcontest2018
+    - hspec
