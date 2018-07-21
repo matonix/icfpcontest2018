@@ -4,11 +4,11 @@
 
 module Trace where
 
-import Data.Bits
+import Bits
 import Control.Applicative
-import System.IO
 import qualified Data.ByteString.Lazy as BL
 import Data.Binary.Get
+import Data.Binary.Put
 
 data Trace
   = Halt
@@ -20,24 +20,12 @@ data Trace
   | FusionS { nd :: Diff }
   | Fission { nd :: Diff, m :: Int }
   | Fill { nd :: Diff }
-  deriving Show
+  deriving (Show, Eq)
 
-data Diff = D { dx :: Int, dy :: Int, dz :: Int } deriving Show
+data Diff = D { dx :: Int, dy :: Int, dz :: Int } deriving (Show, Eq)
 
--- | ビット。 I は 1, O は 0
-data B = I | O deriving Show
-
--- | 8ビット。 左がMSB, 右がLSB
-data Byte = B B B B B B B B B deriving Show
-
-readTraces :: FilePath -> IO [Trace]
-readTraces f = do
-    rh <- openFile f ReadMode
-    i  <- BL.hGetContents rh
-    return $ runGet getTraces i
-
-getTraces :: Get [Trace]
-getTraces = many getTrace
+getTraces :: BL.ByteString -> [Trace]
+getTraces = runGet (many getTrace)
 
 getTrace :: Get Trace
 getTrace = do
@@ -84,16 +72,42 @@ mknd nd4 nd3 nd2 nd1 nd0 = tToD . reverse . map pred . iToT $ bToI [nd4, nd3, nd
     tToD [dx, dy, dz] = D dx dy dz
     tToD _ = undefined
 
+-- | write
 
--- http://d.hatena.ne.jp/keigoi/20101008/1286503107
+putTraces :: [Trace] -> BL.ByteString
+putTraces = runPut . mconcat . map putTrace
 
-bool2b :: Bool -> B
-bool2b True = I
-bool2b False = O
+putTrace :: Trace -> Put
+putTrace Halt = putWord8 0b11111111
+putTrace Wait = putWord8 0b11111110
+putTrace Flip = putWord8 0b11111101
+putTrace (SMove lld) = let
+  (a, i) = dToB 15 lld
+  in putWord16be $ shiftL a 12 .|. shiftL 0b100 8 .|. i .&. 0b11111
+putTrace (LMove sld1 sld2) = let
+  (a1, i1) = dToB 5 sld1
+  (a2, i2) = dToB 5 sld2
+  in putWord16be $ shiftL a2 14 .|. shiftL a1 12 .|. shiftL 0b1100 8 .|. shiftL (i2 .&. 0b1111) 4 .|. i1 .&. 0b1111
+putTrace (FusionP nd) = putWord8 $ shiftL (ndToB nd) 3 .|. 0b111
+putTrace (FusionS nd) = putWord8 $ shiftL (ndToB nd) 3 .|. 0b110
+putTrace (Fission nd m) = putWord16be $ shiftL (ndToB nd) 11 .|. shiftL 0b101 8 .|. fromInteger (toInteger m)
+putTrace (Fill nd) = putWord8 $ shiftL (ndToB nd) 3 .|. 0b011
 
-bit' :: Bits a => Int -> a -> B
-bit' i b = bool2b $ testBit b i
+dToB :: Num a => Int -> Diff -> (a, a)
+dToB off (D dx 0 0) = (0b01, fromInteger $ toInteger $ dx + off)
+dToB off (D 0 dy 0) = (0b10, fromInteger $ toInteger $ dy + off)
+dToB off (D 0 0 dz) = (0b11, fromInteger $ toInteger $ dz + off)
+dToB _ _ = undefined
 
--- | view patternで使う関数
-bit8 :: Bits a => a -> Byte
-bit8 b = B (bit' 7 b) (bit' 6 b) (bit' 5 b) (bit' 4 b) (bit' 3 b) (bit' 2 b) (bit' 1 b) (bit' 0 b)
+ndToB :: Num a => Diff -> a
+ndToB (D dx dy dz) = fromInteger $ toInteger $ (dx + 1) * 9 + (dy + 1) * 3 + (dz + 1) - 1
+
+-- | testing
+eqTraces :: FilePath -> IO ()
+eqTraces f = do
+    i  <- BL.readFile f
+    let i1 = getTraces i
+    -- let i1 = getTraces (putTraces (getTraces i))
+    let i2 = getTraces (putTraces i1)
+    mapM_ print $ take 10 $ filter (uncurry (/=)) $ zip i1 i2
+    print $ i1 == i2
